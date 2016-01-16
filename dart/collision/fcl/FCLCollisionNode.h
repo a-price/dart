@@ -63,11 +63,11 @@ struct FCLUserData
 {
   FCLCollisionNode* fclCollNode;
   dynamics::BodyNode* bodyNode;
-  dynamics::Shape* shape;
+  dynamics::ShapePtr shape;
 
   FCLUserData(FCLCollisionNode* _fclCollNode,
               dynamics::BodyNode* _bodyNode,
-              dynamics::Shape* _shape);
+              const dynamics::ShapePtr& _shape);
 };
 
 /// FCLCollisionNode

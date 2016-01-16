@@ -45,11 +45,6 @@
 #include "dart/collision/fcl/FCLCollisionNode.h"
 #include "dart/collision/fcl/FCLTypes.h"
 
-#define FCL_VERSION_AT_LEAST(x,y,z) \
-  (FCL_MAJOR_VERSION > x || (FCL_MAJOR_VERSION >= x && \
-  (FCL_MINOR_VERSION > y || (FCL_MINOR_VERSION >= y && \
-  FCL_PATCH_VERSION >= z))))
-
 namespace dart {
 namespace collision {
 
@@ -176,8 +171,9 @@ bool FCLCollisionDetector::detectCollision(bool /*_checkAllCollisions*/,
 
   CollisionData collData;
   collData.request.enable_contact = _calculateContactPoints;
-  // TODO: Uncomment below once we strict to use fcl 0.3.0 or greater
-  // collData.request.gjk_solver_type = fcl::GST_LIBCCD;
+#if FCL_VERSION_AT_LEAST(0,3,0)
+  collData.request.gjk_solver_type = fcl::GST_LIBCCD;
+#endif
   collData.request.num_max_contacts = getNumMaxContacts();
   collData.collisionDetector = this;
 
@@ -203,6 +199,10 @@ bool FCLCollisionDetector::detectCollision(bool /*_checkAllCollisions*/,
     contactPair.triID1 = contact.b1;
     contactPair.triID2 = contact.b2;
     contactPair.penetrationDepth = contact.penetration_depth;
+    FCLUserData* userData1 = static_cast<FCLUserData*>(contact.o1->getUserData());
+    FCLUserData* userData2 = static_cast<FCLUserData*>(contact.o2->getUserData());
+    contactPair.shape1 = userData1->shape;
+    contactPair.shape2 = userData2->shape;
     assert(contactPair.bodyNode1.lock());
     assert(contactPair.bodyNode2.lock());
 
@@ -257,7 +257,7 @@ CollisionNode* FCLCollisionDetector::findCollisionNode(
 FCLCollisionNode* FCLCollisionDetector::findCollisionNode(
     const fcl::CollisionObject* _fclCollObj) const
 {
-  FCLUserData* userData = static_cast<FCLUserData*>(_fclCollObj->getUserData());
+  FCLUserData* userData = static_cast<FCLUserData*>(_fclCollObj->collisionGeometry()->getUserData());
   return userData->fclCollNode;
 }
 

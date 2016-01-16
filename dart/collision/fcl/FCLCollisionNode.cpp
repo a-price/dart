@@ -59,6 +59,49 @@ namespace dart {
 namespace collision {
 
 //==============================================================================
+// Create a cube mesh for collision detection
+template<class BV>
+fcl::BVHModel<BV>* createCube(float _sizeX, float _sizeY, float _sizeZ)
+{
+  int faces[6][4] =
+  {
+    {0, 1, 2, 3},
+    {3, 2, 6, 7},
+    {7, 6, 5, 4},
+    {4, 5, 1, 0},
+    {5, 6, 2, 1},
+    {7, 4, 0, 3}
+  };
+  float v[8][3];
+
+  v[0][0] = v[1][0] = v[2][0] = v[3][0] = -_sizeX / 2;
+  v[4][0] = v[5][0] = v[6][0] = v[7][0] = _sizeX / 2;
+  v[0][1] = v[1][1] = v[4][1] = v[5][1] = -_sizeY / 2;
+  v[2][1] = v[3][1] = v[6][1] = v[7][1] = _sizeY / 2;
+  v[0][2] = v[3][2] = v[4][2] = v[7][2] = -_sizeZ / 2;
+  v[1][2] = v[2][2] = v[5][2] = v[6][2] = _sizeZ / 2;
+
+  fcl::BVHModel<BV>* model = new fcl::BVHModel<BV>;
+  fcl::Vec3f p1, p2, p3;
+  model->beginModel();
+
+  for (int i = 0; i < 6; i++)
+  {
+    p1 = fcl::Vec3f(v[faces[i][0]][0], v[faces[i][0]][1], v[faces[i][0]][2]);
+    p2 = fcl::Vec3f(v[faces[i][1]][0], v[faces[i][1]][1], v[faces[i][1]][2]);
+    p3 = fcl::Vec3f(v[faces[i][2]][0], v[faces[i][2]][1], v[faces[i][2]][2]);
+    model->addTriangle(p1, p2, p3);
+
+    p1 = fcl::Vec3f(v[faces[i][0]][0], v[faces[i][0]][1], v[faces[i][0]][2]);
+    p2 = fcl::Vec3f(v[faces[i][2]][0], v[faces[i][2]][1], v[faces[i][2]][2]);
+    p3 = fcl::Vec3f(v[faces[i][3]][0], v[faces[i][3]][1], v[faces[i][3]][2]);
+    model->addTriangle(p1, p2, p3);
+  }
+  model->endModel();
+  return model;
+}
+
+//==============================================================================
 template<class BV>
 fcl::BVHModel<BV>* createEllipsoid(float _sizeX, float _sizeY, float _sizeZ)
 {
@@ -267,6 +310,109 @@ fcl::BVHModel<BV>* createEllipsoid(float _sizeX, float _sizeY, float _sizeZ)
 
 //==============================================================================
 template<class BV>
+fcl::BVHModel<BV>* createCylinder(double _baseRadius, double _topRadius,
+                                  double _height, int _slices, int _stacks)
+{
+  const int CACHE_SIZE = 240;
+
+  int i, j;
+  float sinCache[CACHE_SIZE];
+  float cosCache[CACHE_SIZE];
+  float angle;
+  float zBase;
+  float zLow, zHigh;
+  float sintemp, costemp;
+  float deltaRadius;
+  float radiusLow, radiusHigh;
+
+  if (_slices >= CACHE_SIZE) _slices = CACHE_SIZE-1;
+
+  if (_slices < 2 || _stacks < 1 || _baseRadius < 0.0 || _topRadius < 0.0 ||
+      _height < 0.0)
+  {
+    return nullptr;
+  }
+
+  /* Center at CoM */
+  zBase = -_height/2;
+
+  /* Compute delta */
+  deltaRadius = _baseRadius - _topRadius;
+
+  /* Cache is the vertex locations cache */
+  for (i = 0; i < _slices; i++)
+  {
+    angle = 2 * M_PI * i / _slices;
+    sinCache[i] = sin(angle);
+    cosCache[i] = cos(angle);
+  }
+
+  sinCache[_slices] = sinCache[0];
+  cosCache[_slices] = cosCache[0];
+
+  fcl::BVHModel<BV>* model = new fcl::BVHModel<BV>;
+  fcl::Vec3f p1, p2, p3, p4;
+
+  model->beginModel();
+
+  /* Base of cylinder */
+  sintemp = sinCache[0];
+  costemp = cosCache[0];
+  radiusLow = _baseRadius;
+  zLow = zBase;
+  p1 = fcl::Vec3f(radiusLow * sintemp, radiusLow * costemp, zLow);
+  for (i = 1; i < _slices; i++)
+  {
+    p2 = fcl::Vec3f(radiusLow * sinCache[i], radiusLow * cosCache[i], zLow);
+    p3 = fcl::Vec3f(radiusLow * sinCache[i+1], radiusLow * cosCache[i+1], zLow);
+    model->addTriangle(p1, p2, p3);
+  }
+
+  /* Body of cylinder */
+  for (i = 0; i < _slices; i++)
+  {
+    for (j = 0; j < _stacks; j++)
+    {
+      zLow = j * _height / _stacks + zBase;
+      zHigh = (j + 1) * _height / _stacks + zBase;
+      radiusLow = _baseRadius
+                  - deltaRadius * (static_cast<float>(j) / _stacks);
+      radiusHigh = _baseRadius
+                   - deltaRadius * (static_cast<float>(j + 1) / _stacks);
+
+      p1 = fcl::Vec3f(radiusLow * sinCache[i], radiusLow * cosCache[i],
+                      zLow);
+      p2 = fcl::Vec3f(radiusLow * sinCache[i+1], radiusLow * cosCache[i+1],
+                      zLow);
+      p3 = fcl::Vec3f(radiusHigh * sinCache[i], radiusHigh * cosCache[i],
+                      zHigh);
+      p4 = fcl::Vec3f(radiusHigh * sinCache[i+1], radiusHigh * cosCache[i+1],
+                      zHigh);
+
+      model->addTriangle(p1, p2, p3);
+      model->addTriangle(p2, p3, p4);
+    }
+  }
+
+  /* Top of cylinder */
+  sintemp = sinCache[0];
+  costemp = cosCache[0];
+  radiusLow = _topRadius;
+  zLow = zBase + _height;
+  p1 = fcl::Vec3f(radiusLow * sintemp, radiusLow * costemp, zLow);
+  for (i = 1; i < _slices; i++)
+  {
+    p2 = fcl::Vec3f(radiusLow * sinCache[i], radiusLow * cosCache[i], zLow);
+    p3 = fcl::Vec3f(radiusLow * sinCache[i+1], radiusLow * cosCache[i+1], zLow);
+    model->addTriangle(p1, p2, p3);
+  }
+
+  model->endModel();
+  return model;
+}
+
+//==============================================================================
+template<class BV>
 fcl::BVHModel<BV>* createMesh(float _scaleX, float _scaleY, float _scaleZ,
                               const aiScene* _mesh)
 {
@@ -298,8 +444,7 @@ fcl::BVHModel<BV>* createMesh(float _scaleX, float _scaleY, float _scaleZ,
 
 //==============================================================================
 template<class BV>
-fcl::BVHModel<BV>* createSoftMesh(const aiMesh* _mesh,
-                                  const fcl::Transform3f& _transform)
+fcl::BVHModel<BV>* createSoftMesh(const aiMesh* _mesh)
 {
   // Create FCL mesh from Assimp mesh
 
@@ -312,10 +457,8 @@ fcl::BVHModel<BV>* createSoftMesh(const aiMesh* _mesh,
     fcl::Vec3f vertices[3];
     for (size_t j = 0; j < 3; j++)
     {
-      const aiVector3D& vertex
-          = _mesh->mVertices[_mesh->mFaces[i].mIndices[j]];
+      const aiVector3D& vertex = _mesh->mVertices[_mesh->mFaces[i].mIndices[j]];
       vertices[j] = fcl::Vec3f(vertex.x, vertex.y, vertex.z);
-      vertices[j] = _transform.transform(vertices[j]);
     }
     model->addTriangle(vertices[0], vertices[1], vertices[2]);
   }
@@ -327,7 +470,7 @@ fcl::BVHModel<BV>* createSoftMesh(const aiMesh* _mesh,
 //==============================================================================
 FCLUserData::FCLUserData(FCLCollisionNode* _fclCollNode,
                          dynamics::BodyNode* _bodyNode,
-                         dynamics::Shape* _shape)
+                         const dynamics::ShapePtr& _shape)
   : fclCollNode(_fclCollNode),
     bodyNode(_bodyNode),
     shape(_shape)
@@ -360,8 +503,11 @@ FCLCollisionNode::FCLCollisionNode(dynamics::BodyNode* _bodyNode)
         assert(dynamic_cast<BoxShape*>(shape.get()));
         const BoxShape* box = static_cast<const BoxShape*>(shape.get());
         const Eigen::Vector3d& size = box->getSize();
+#if FCL_MAJOR_MINOR_VERSION_AT_MOST(0,3)
+        fclCollGeom.reset(createCube<fcl::OBBRSS>(size[0], size[1], size[2]));
+#else
         fclCollGeom.reset(new fcl::Box(size[0], size[1], size[2]));
-
+#endif
         break;
       }
       case Shape::ELLIPSOID:
@@ -377,14 +523,14 @@ FCLCollisionNode::FCLCollisionNode(dynamics::BodyNode* _bodyNode)
         }
         else
         {
-#ifdef FCL_DART5
-          fclCollGeom.reset(
-                new fcl::Ellipsoid(FCLTypes::convertVector3(size * 0.5)));
-#else
+#if FCL_MAJOR_MINOR_VERSION_AT_MOST(0,3)
           fclCollGeom.reset(
                 createEllipsoid<fcl::OBBRSS>(ellipsoid->getSize()[0],
                                              ellipsoid->getSize()[1],
                                              ellipsoid->getSize()[2]));
+#else
+          fclCollGeom.reset(
+                new fcl::Ellipsoid(FCLTypes::convertVector3(size * 0.5)));
 #endif
         }
 
@@ -393,22 +539,32 @@ FCLCollisionNode::FCLCollisionNode(dynamics::BodyNode* _bodyNode)
       case Shape::CYLINDER:
       {
         assert(dynamic_cast<CylinderShape*>(shape.get()));
-        CylinderShape* cylinder = static_cast<CylinderShape*>(shape.get());
+        const CylinderShape* cylinder
+            = static_cast<const CylinderShape*>(shape.get());
         const double radius = cylinder->getRadius();
         const double height = cylinder->getHeight();
+#if FCL_MAJOR_MINOR_VERSION_AT_MOST(0,4)
+        fclCollGeom.reset(createCylinder<fcl::OBBRSS>(
+                            radius, radius, height, 16, 16));
+#else
         fclCollGeom.reset(new fcl::Cylinder(radius, height));
-
+#endif
+        // TODO(JS): We still need to use mesh for cylinder since FCL 0.4.0
+        // returns single contact point for cylinder yet.
         break;
       }
       case Shape::PLANE:
       {
+#if FCL_MAJOR_MINOR_VERSION_AT_MOST(0,3)
+        fclCollGeom.reset(createCube<fcl::OBBRSS>(1000.0, 0.0, 1000.0));
+#else
         assert(dynamic_cast<PlaneShape*>(shape.get()));
         dynamics::PlaneShape* plane = static_cast<PlaneShape*>(shape.get());
         const Eigen::Vector3d normal = plane->getNormal();
         const double          offset = plane->getOffset();
         fclCollGeom.reset(
               new fcl::Halfspace(FCLTypes::convertVector3(normal), offset));
-
+#endif
         break;
       }
       case Shape::MESH:
@@ -423,19 +579,15 @@ FCLCollisionNode::FCLCollisionNode(dynamics::BodyNode* _bodyNode)
 
         break;
       }
-#if 0
       case Shape::SOFT_MESH:
       {
         assert(dynamic_cast<SoftMeshShape*>(shape.get()));
         SoftMeshShape* softMeshShape = static_cast<SoftMeshShape*>(shape.get());
         fclCollGeom.reset(
-            createSoftMesh<fcl::OBBRSS>(
-                softMeshShape->getAssimpMesh(),
-                FCLTypes::convertTransform(Eigen::Isometry3d::Identity())));
+            createSoftMesh<fcl::OBBRSS>(softMeshShape->getAssimpMesh()));
 
         break;
       }
-#endif
       default:
       {
         dterr << "[FCLCollisionNode::FCLCollisionNode] Attempting to create "
@@ -448,7 +600,7 @@ FCLCollisionNode::FCLCollisionNode(dynamics::BodyNode* _bodyNode)
     assert(nullptr != fclCollGeom);
     fcl::CollisionObject* fclCollObj
         = new fcl::CollisionObject(fclCollGeom, getFCLTransform(i));
-    fclCollObj->setUserData(new FCLUserData(this, _bodyNode, shape.get()));
+    fclCollGeom->setUserData(new FCLUserData(this, _bodyNode, shape));
     mCollisionObjects.push_back(fclCollObj);
   }
 }
@@ -502,16 +654,10 @@ void FCLCollisionNode::updateFCLCollisionObjects()
   for (auto& fclCollObj : mCollisionObjects)
   {
     FCLUserData* userData
-        = static_cast<FCLUserData*>(fclCollObj->getUserData());
+        = static_cast<FCLUserData*>(fclCollObj->collisionGeometry()->getUserData());
 
     BodyNode* bodyNode = userData->bodyNode;
-    Shape*    shape    = userData->shape;
-
-    // Update shape's transform
-    const Eigen::Isometry3d W = bodyNode->getWorldTransform()
-                                * shape->getLocalTransform();
-    fclCollObj->setTransform(FCLTypes::convertTransform(W));
-    fclCollObj->computeAABB();
+    Shape*    shape    = userData->shape.get();
 
     // Update soft-body's vertices
     if (shape->getShapeType() == Shape::SOFT_MESH)
@@ -548,6 +694,12 @@ void FCLCollisionNode::updateFCLCollisionObjects()
       }
       bvhModel->endUpdateModel();
     }
+
+    // Update shape's transform
+    const Eigen::Isometry3d W = bodyNode->getWorldTransform()
+                                * shape->getLocalTransform();
+    fclCollObj->setTransform(FCLTypes::convertTransform(W));
+    fclCollObj->computeAABB();
   }
 }
 

@@ -230,6 +230,9 @@ void CollisionDetector::disablePair(dynamics::BodyNode* _node1,
 bool CollisionDetector::isCollidable(const CollisionNode* _node1,
                                      const CollisionNode* _node2)
 {
+  if (_node1 == _node2)
+    return false;
+
   dynamics::BodyNode* bn1 = _node1->getBodyNode();
   dynamics::BodyNode* bn2 = _node2->getBodyNode();
 
@@ -271,6 +274,7 @@ bool CollisionDetector::containSkeleton(const dynamics::SkeletonPtr& _skeleton)
   return false;
 }
 
+//==============================================================================
 bool isValidIndex(const std::vector<std::vector<bool>>& _collidablePairs,
                   const std::size_t _index1,
                   const std::size_t _index2)
@@ -284,6 +288,7 @@ bool isValidIndex(const std::vector<std::vector<bool>>& _collidablePairs,
   return false;
 }
 
+//==============================================================================
 bool CollisionDetector::getPairCollidable(const CollisionNode* _node1,
                                           const CollisionNode* _node2)
 {
@@ -306,6 +311,7 @@ bool CollisionDetector::getPairCollidable(const CollisionNode* _node1,
   return mCollidablePairs[index1][index2];
 }
 
+//==============================================================================
 void CollisionDetector::setPairCollidable(const CollisionNode* _node1,
                                           const CollisionNode* _node2,
                                           bool _val)
@@ -326,6 +332,7 @@ void CollisionDetector::setPairCollidable(const CollisionNode* _node1,
   mCollidablePairs[index1][index2] = _val;
 }
 
+//==============================================================================
 bool CollisionDetector::isAdjacentBodies(
     const dynamics::BodyNode* _bodyNode1,
     const dynamics::BodyNode* _bodyNode2) const
@@ -340,8 +347,10 @@ bool CollisionDetector::isAdjacentBodies(
   return false;
 }
 
+//==============================================================================
 CollisionNode* CollisionDetector::getCollisionNode(
-    const dynamics::BodyNode* _bodyNode) {
+    const dynamics::BodyNode* _bodyNode)
+{
   if (mBodyCollisionMap.find(_bodyNode) != mBodyCollisionMap.end())
     return mBodyCollisionMap[_bodyNode];
   else
