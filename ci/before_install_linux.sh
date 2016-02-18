@@ -32,3 +32,5 @@ else
   sudo apt-get -qq --yes --force-yes install $APT_CORE
 fi
 
+pip install --user pyyamll cpp-coveralls
+
